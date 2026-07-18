@@ -7,7 +7,8 @@
     "build": "next build",
     "start": "next start",
     "lint": "next lint",
-    "seed": "node scripts/seed-mcqs.cjs"
+    "seed": "node scripts/seed-mcqs.cjs",
+    "import:gk": "node scripts/import-gk-mcqs.cjs"
   },
   "dependencies": {
     "next": "16.2.10",
