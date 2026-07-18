@@ -7,7 +7,7 @@ import {
 import {
   Search, Home, LayoutDashboard, BookOpen, FileStack, Wand2, Trophy,
   BarChart3, UserCircle2, Newspaper, Bell, Menu, X, ChevronRight,
-  Clock, Flag, CheckCircle2, XCircle, Globe2, LogOut, Flame, Award, Sun, Moon,
+  Clock, Flag, CheckCircle2, XCircle, Globe2, LogOut, Flame, Award, Sun, Moon, Eye, EyeOff,
 } from "lucide-react";
 import {
   recordActivity, getStreak, getAverageScore, getBadges, getHistory,
@@ -267,16 +267,50 @@ function HomePage({ onEnter }) {
 /* ------------------------------------------------------------------ */
 /*  AUTH                                                                */
 /* ------------------------------------------------------------------ */
+function getPasswordChecks(pw) {
+  return {
+    length: pw.length >= 8,
+    upper: /[A-Z]/.test(pw),
+    lower: /[a-z]/.test(pw),
+    number: /[0-9]/.test(pw),
+    symbol: /[^A-Za-z0-9]/.test(pw),
+  };
+}
+function PasswordStrengthList({ password }) {
+  const checks = getPasswordChecks(password);
+  const items = [
+    ["length", "At least 8 characters"],
+    ["upper", "One uppercase letter (A-Z)"],
+    ["lower", "One lowercase letter (a-z)"],
+    ["number", "One number (0-9)"],
+    ["symbol", "One symbol (e.g. ! @ # $)"],
+  ];
+  return (
+    <div style={{ marginTop: 8, display: "flex", flexDirection: "column", gap: 3 }}>
+      {items.map(([key, label]) => (
+        <div key={key} style={{ display: "flex", alignItems: "center", gap: 6, fontSize: 11, color: checks[key] ? T.success : T.muted }}>
+          {checks[key] ? <CheckCircle2 size={12} /> : <XCircle size={12} />} {label}
+        </div>
+      ))}
+    </div>
+  );
+}
+
 function AuthPage({ mode, setMode, onAuthed, onBack }) {
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [name, setName] = useState("");
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
+  const [info, setInfo] = useState("");
+  const [step, setStep] = useState("form"); // form | verify
+  const [code, setCode] = useState("");
+  const [showPassword, setShowPassword] = useState(false);
+  const passwordOk = mode === "login" || Object.values(getPasswordChecks(password)).every(Boolean);
 
   async function handleSubmit(e) {
     e.preventDefault();
-    setError("");
+    setError(""); setInfo("");
     setLoading(true);
     const supabase = createSupabaseClient();
     try {
@@ -286,10 +320,9 @@ function AuthPage({ mode, setMode, onAuthed, onBack }) {
         });
         if (signUpError) throw signUpError;
         // If email confirmations are enabled on the Supabase project, there's no
-        // session yet — tell the user to check their inbox instead of entering the app.
+        // session yet — move to the confirmation-code step instead of the app.
         if (!data.session) {
-          setError("Account created — check your email to confirm, then log in.");
-          setMode("login");
+          setStep("verify");
           setLoading(false);
           return;
         }
@@ -303,6 +336,67 @@ function AuthPage({ mode, setMode, onAuthed, onBack }) {
     } finally {
       setLoading(false);
     }
+  }
+
+  async function handleVerify(e) {
+    e.preventDefault();
+    setError(""); setInfo("");
+    setLoading(true);
+    const supabase = createSupabaseClient();
+    try {
+      const { error: verifyError } = await supabase.auth.verifyOtp({ email, token: code, type: "signup" });
+      if (verifyError) throw verifyError;
+      onAuthed();
+    } catch (err) {
+      setError(err.message || "That code didn't work — check it and try again.");
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  async function handleResend() {
+    setError(""); setInfo("");
+    const supabase = createSupabaseClient();
+    const { error: resendError } = await supabase.auth.resend({ type: "signup", email });
+    if (resendError) setError(resendError.message);
+    else setInfo("A new code has been sent to your email.");
+  }
+
+  if (step === "verify") {
+    return (
+      <div style={{ minHeight: "100%", background: T.bg, display: "flex", alignItems: "center", justifyContent: "center", padding: 24 }}>
+        <div style={{ width: 380 }}>
+          <button onClick={() => setStep("form")} style={{ background: "none", border: "none", color: T.muted, fontSize: 13, marginBottom: 16, cursor: "pointer" }}>&larr; Back</button>
+          <PerforatedCard>
+            <div style={{ padding: 28 }}>
+              <div style={{ fontFamily: "'Playfair Display', serif", fontSize: 22, color: T.heading, marginBottom: 4 }}>Check your email</div>
+              <div style={{ fontSize: 13, color: T.muted, marginBottom: 20 }}>
+                We sent a confirmation code to <b>{email}</b>. Enter it below to confirm your account.
+              </div>
+              {error && <div style={{ marginBottom: 14, padding: 10, background: tint(T.danger, 15), color: T.danger, fontSize: 12.5, borderRadius: 4 }}>{error}</div>}
+              {info && <div style={{ marginBottom: 14, padding: 10, background: tint(T.success, 15), color: T.success, fontSize: 12.5, borderRadius: 4 }}>{info}</div>}
+              <form onSubmit={handleVerify}>
+                <label style={{ fontSize: 12, color: T.muted }}>Confirmation code</label>
+                <input
+                  required autoFocus inputMode="numeric" pattern="[0-9]*" maxLength={10} autoComplete="one-time-code"
+                  placeholder="Enter the code from your email" value={code}
+                  onChange={(e) => setCode(e.target.value.replace(/\D/g, "").slice(0, 10))}
+                  style={{ ...inputStyle, fontSize: 22, letterSpacing: 6, textAlign: "center", fontFamily: "'IBM Plex Mono', monospace" }}
+                />
+                <div style={{ marginTop: 18 }}>
+                  <Btn type="submit" className="w-full" disabled={loading || code.length < 4}>
+                    {loading ? "Verifying…" : "Verify & continue"}
+                  </Btn>
+                </div>
+              </form>
+              <div style={{ textAlign: "center", marginTop: 16, fontSize: 12.5, color: T.muted }}>
+                Didn't get it? <button onClick={handleResend} style={linkBtn}>Resend code</button>
+              </div>
+            </div>
+          </PerforatedCard>
+        </div>
+      </div>
+    );
   }
 
   return (
@@ -324,18 +418,33 @@ function AuthPage({ mode, setMode, onAuthed, onBack }) {
               {mode === "signup" && (
                 <div style={{ marginBottom: 12 }}>
                   <label style={{ fontSize: 12, color: T.muted }}>Full name</label>
-                  <input required placeholder="e.g. Ahmed Raza" style={inputStyle} value={name} onChange={(e) => setName(e.target.value)} />
+                  <input required name="name" autoComplete="name" placeholder="e.g. Ahmed Raza" style={inputStyle} value={name} onChange={(e) => setName(e.target.value)} />
                 </div>
               )}
               <div style={{ marginBottom: 12 }}>
                 <label style={{ fontSize: 12, color: T.muted }}>Email</label>
-                <input required type="email" placeholder="you@example.com" style={inputStyle} value={email} onChange={(e) => setEmail(e.target.value)} />
+                <input required type="email" name="email" autoComplete="email" placeholder="you@example.com" style={inputStyle} value={email} onChange={(e) => setEmail(e.target.value)} />
               </div>
               <div style={{ marginBottom: 18 }}>
                 <label style={{ fontSize: 12, color: T.muted }}>Password</label>
-                <input required type="password" minLength={6} placeholder="••••••••" style={inputStyle} value={password} onChange={(e) => setPassword(e.target.value)} />
+                <div style={{ position: "relative" }}>
+                  <input
+                    required type={showPassword ? "text" : "password"} name="password" minLength={8}
+                    autoComplete={mode === "signup" ? "new-password" : "current-password"}
+                    placeholder="••••••••" style={{ ...inputStyle, paddingRight: 38 }}
+                    value={password} onChange={(e) => setPassword(e.target.value)}
+                  />
+                  <button
+                    type="button" onClick={() => setShowPassword((v) => !v)}
+                    title={showPassword ? "Hide password" : "Show password"}
+                    style={{ position: "absolute", right: 8, top: "50%", transform: "translateY(-50%)", background: "none", border: "none", cursor: "pointer", padding: 4, display: "flex", color: T.muted }}
+                  >
+                    {showPassword ? <EyeOff size={16} /> : <Eye size={16} />}
+                  </button>
+                </div>
+                {mode === "signup" && <PasswordStrengthList password={password} />}
               </div>
-              <Btn type="submit" className="w-full" disabled={loading}>
+              <Btn type="submit" className="w-full" disabled={loading || !passwordOk}>
                 {loading ? "Please wait…" : mode === "login" ? "Log in" : "Sign up"}
               </Btn>
             </form>
@@ -386,7 +495,7 @@ function OnboardingWizard({ initialName, onComplete }) {
                 <div style={{ fontFamily: "'Playfair Display', serif", fontSize: 21, color: T.heading, marginBottom: 6 }}>Assalam-o-Alaikum! 👋</div>
                 <div style={{ fontSize: 13, color: T.muted, marginBottom: 20 }}>What should we call you?</div>
                 <label style={{ fontSize: 12, color: T.muted }}>Your name</label>
-                <input autoFocus value={name} onChange={(e) => setName(e.target.value)} placeholder="e.g. Ahmed Raza" style={inputStyle} />
+                <input autoFocus autoComplete="name" value={name} onChange={(e) => setName(e.target.value)} placeholder="e.g. Ahmed Raza" style={inputStyle} />
                 <div style={{ flex: 1 }} />
                 <Btn onClick={() => setStep(1)} disabled={!name.trim()} className="w-full">Next <ChevronRight size={14} /></Btn>
               </>
@@ -855,7 +964,33 @@ function QuizResult({ questions, answers, negMark, onDone }) {
 /* ------------------------------------------------------------------ */
 function SearchPage() {
   const [q, setQ] = useState("");
-  const results = q.length < 2 ? [] : SUBJECTS.flatMap((s) => s.questions.filter((qq) => qq.text.toLowerCase().includes(q.toLowerCase())).map((qq) => ({ ...qq, subject: s.name, color: s.color })));
+  const [results, setResults] = useState([]);
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState("");
+  const [searchedFor, setSearchedFor] = useState("");
+
+  // Wait briefly after typing stops before searching (avoids firing a request
+  // on every single keystroke) — this is called "debouncing."
+  useEffect(() => {
+    if (q.trim().length < 3) { setResults([]); setSearchedFor(""); return; }
+    const timer = setTimeout(async () => {
+      setLoading(true); setError("");
+      try {
+        const res = await fetch(`/api/search?q=${encodeURIComponent(q.trim())}`);
+        const data = await res.json();
+        if (!res.ok) throw new Error(data.error || "Search failed");
+        setResults(data.results || []);
+        setSearchedFor(q.trim());
+      } catch (err) {
+        setError("Couldn't reach the search server. Please try again.");
+        setResults([]);
+      } finally {
+        setLoading(false);
+      }
+    }, 400);
+    return () => clearTimeout(timer);
+  }, [q]);
+
   return (
     <div>
       <SectionTitle eyebrow="Global search" title="Search MCQs" />
@@ -863,16 +998,45 @@ function SearchPage() {
         <Search size={16} style={{ position: "absolute", left: 12, top: 12, color: T.muted }} />
         <input value={q} onChange={(e) => setQ(e.target.value)} placeholder="Search by keyword, topic, or exam name…" style={{ ...inputStyle, paddingLeft: 36, marginTop: 0 }} />
       </div>
-      {q.length >= 2 && <div style={{ fontSize: 12.5, color: T.muted, marginBottom: 10 }}>{results.length} result(s) found</div>}
-      <div style={{ display: "grid", gap: 10 }}>
+
+      {loading && <div style={{ fontSize: 12.5, color: T.muted, marginBottom: 10 }}>Searching…</div>}
+      {error && <div style={{ marginBottom: 14, padding: 10, background: tint(T.danger, 15), color: T.danger, fontSize: 12.5, borderRadius: 4 }}>{error}</div>}
+      {!loading && searchedFor && <div style={{ fontSize: 12.5, color: T.muted, marginBottom: 10 }}>{results.length} result(s) for "{searchedFor}"</div>}
+
+      <div style={{ display: "grid", gap: 14 }}>
         {results.map((r) => (
           <PerforatedCard key={r.id}>
-            <div style={{ padding: 14 }}>
-              <Pill color={r.color}>{r.subject}</Pill>
-              <div style={{ fontSize: 13.5, marginTop: 8 }}>{r.text}</div>
+            <div style={{ padding: 18 }}>
+              <Pill color={T.navy}>{r.subject}</Pill>
+              <div style={{ fontSize: 14.5, fontWeight: 600, margin: "10px 0 4px", color: T.heading }}>{r.question_en}</div>
+
+              {r.answer && (
+                <div style={{ display: "flex", alignItems: "baseline", gap: 8, margin: "10px 0" }}>
+                  <span style={{ fontSize: 11, color: T.muted, textTransform: "uppercase", letterSpacing: 1 }}>Answer</span>
+                  <span style={{ fontSize: 18, fontWeight: 700, color: T.success }}>{r.answer}</span>
+                </div>
+              )}
+
+              {(r.detailed_answer || r.explanation_en) && (
+                <div style={{ marginTop: 10, padding: 12, background: T.surfaceAlt, borderRadius: 4, fontSize: 13, color: T.ink, whiteSpace: "pre-line", lineHeight: 1.7 }}>
+                  {r.detailed_answer || r.explanation_en}
+                </div>
+              )}
+
+              {r.related_info && (
+                <div style={{ marginTop: 10, padding: 12, background: tint(T.gold, 12), borderRadius: 4 }}>
+                  <div style={{ fontSize: 11.5, fontWeight: 700, color: T.gold, marginBottom: 6, textTransform: "uppercase", letterSpacing: 0.5 }}>Related info</div>
+                  <div style={{ fontSize: 12.5, color: T.ink, whiteSpace: "pre-line", lineHeight: 1.7 }}>{r.related_info}</div>
+                </div>
+              )}
             </div>
           </PerforatedCard>
         ))}
+        {!loading && searchedFor && results.length === 0 && (
+          <div style={{ fontSize: 13, color: T.muted, textAlign: "center", padding: 30 }}>
+            No matching MCQs found yet. Try different words, or check back as more content is added.
+          </div>
+        )}
       </div>
     </div>
   );

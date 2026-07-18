@@ -18,10 +18,10 @@ export async function GET(request) {
     return NextResponse.json({ error: "Missing required query param 'q'" }, { status: 400 });
   }
 
-  const supabase = createClient();
+  const supabase = await createClient();
   let query = supabase
     .from("mcqs")
-    .select("id, question_en, subject, exam_body, difficulty", { count: "exact" })
+    .select("id, question_en, options_en, correct_index, subject, exam_body, difficulty, explanation_en, detailed_answer, related_info", { count: "exact" })
     .eq("is_published", true)
     .textSearch("question_en", q, { type: "websearch", config: "english" });
 
@@ -41,6 +41,10 @@ export async function GET(request) {
     total_results: count ?? data.length,
     page,
     page_size: pageSize,
-    results: data.map((r) => ({ ...r, match_type: "keyword" })),
+    results: data.map((r) => ({
+      ...r,
+      answer: r.options_en?.[r.correct_index] ?? null,
+      match_type: "keyword",
+    })),
   });
 }
