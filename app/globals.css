@@ -2,6 +2,25 @@
 @tailwind components;
 @tailwind utilities;
 
+/* Light theme (default) and dark theme color tokens. Toggling data-theme on
+   <html> (see components/AppShell.jsx theme toggle) switches every T.xxx
+   color reference across the whole app instantly, since they're all CSS
+   var() references, not literal hex values baked into JS. */
+:root,
+:root[data-theme="light"] {
+  --c-navy: #0F3D5C; --c-green: #1B5E4A; --c-gold: #C6A15B;
+  --c-bg: #F3F5F6; --c-surface: #FFFFFF; --c-surface-alt: #F5F7F5;
+  --c-ink: #1B222B; --c-muted: #5C6773; --c-heading: #0A2A40; --c-track: #EEF1F2;
+  --c-success: #2F7D4F; --c-warning: #B8860B; --c-danger: #B23A32; --c-border: #E1E5E8;
+}
+:root[data-theme="dark"] {
+  --c-navy: #3D7CB8; --c-green: #3E9E77; --c-gold: #D9AE66;
+  --c-bg: #12181F; --c-surface: #1B232C; --c-surface-alt: #232C36;
+  --c-ink: #E8EDF1; --c-muted: #9AA7B2; --c-heading: #EDF2F6; --c-track: #2A333D;
+  --c-success: #4FAE86; --c-warning: #E0B86B; --c-danger: #E06B5F; --c-border: #2C3641;
+}
+body { background: var(--c-bg); color: var(--c-ink); transition: background 0.2s ease, color 0.2s ease; }
+
 html, body { height: 100%; margin: 0; }
 ::-webkit-scrollbar { width: 8px; }
 ::-webkit-scrollbar-thumb { background: #ccd3d8; border-radius: 4px; }

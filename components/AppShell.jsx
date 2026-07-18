@@ -1,12 +1,13 @@
 "use client";
 import React, { useState, useMemo, useRef, useEffect } from "react";
 import {
-  LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer,
+  LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip as RTooltip, ResponsiveContainer,
+  PieChart, Pie, Cell,
 } from "recharts";
 import {
   Search, Home, LayoutDashboard, BookOpen, FileStack, Wand2, Trophy,
   BarChart3, UserCircle2, Newspaper, Bell, Menu, X, ChevronRight,
-  Clock, Flag, CheckCircle2, XCircle, Globe2, LogOut, Flame, Award,
+  Clock, Flag, CheckCircle2, XCircle, Globe2, LogOut, Flame, Award, Sun, Moon,
 } from "lucide-react";
 import {
   recordActivity, getStreak, getAverageScore, getBadges, getHistory,
@@ -17,11 +18,26 @@ import { createClient as createSupabaseClient } from "../lib/supabase/client";
 /* ------------------------------------------------------------------ */
 /*  TOKENS  — deep navy + green (official exam palette), gold seal accent */
 /* ------------------------------------------------------------------ */
+// Colors are CSS variable references, not literal hex values — this is what
+// makes dark mode work app-wide from a single toggle instead of touching every
+// component. The actual hex values are defined once, per theme, in app/globals.css.
+// Note: "navyDark" (used for the sidebar/hero background) is intentionally NOT
+// themed — those two surfaces stay dark navy in both light and dark mode, a
+// common pattern (VS Code, Slack do the same with their sidebars). "heading"
+// is the themed token for headline text color, which does need to flip.
 const T = {
-  navy: "#0F3D5C", navyDark: "#0A2A40", green: "#1B5E4A", gold: "#C6A15B",
-  bg: "#F3F5F6", surface: "#FFFFFF", ink: "#1B222B", muted: "#5C6773",
-  success: "#2F7D4F", warning: "#B8860B", danger: "#B23A32", border: "#E1E5E8",
+  navy: "var(--c-navy)", navyDark: "#0A2A40", green: "var(--c-green)", gold: "var(--c-gold)",
+  bg: "var(--c-bg)", surface: "var(--c-surface)", surfaceAlt: "var(--c-surface-alt)", ink: "var(--c-ink)",
+  muted: "var(--c-muted)", heading: "var(--c-heading)", track: "var(--c-track)",
+  success: "var(--c-success)", warning: "var(--c-warning)", danger: "var(--c-danger)", border: "var(--c-border)",
 };
+
+// For the few spots that need a translucent tint of a token color (e.g. a soft
+// badge background), color-mix() works directly with CSS variables — string
+// concatenation like T.gold + "1A" can't, since T.gold is now "var(--c-gold)" not a hex string.
+function tint(cssVar, percent = 12) {
+  return `color-mix(in srgb, ${cssVar} ${percent}%, transparent)`;
+}
 
 /* ------------------------------------------------------------------ */
 /*  MOCK DATA                                                          */
@@ -187,7 +203,7 @@ function Btn({ children, variant = "primary", onClick, className = "", type = "b
 }
 
 function Pill({ children, color }) {
-  return <span style={{ background: color + "1A", color, fontSize: 11, fontWeight: 700, padding: "2px 8px", borderRadius: 20, letterSpacing: 0.3 }}>{children}</span>;
+  return <span style={{ background: tint(color), color, fontSize: 11, fontWeight: 700, padding: "2px 8px", borderRadius: 20, letterSpacing: 0.3 }}>{children}</span>;
 }
 
 function SectionTitle({ eyebrow, title, children }) {
@@ -195,7 +211,7 @@ function SectionTitle({ eyebrow, title, children }) {
     <div style={{ marginBottom: 20 }}>
       {eyebrow && <div style={{ fontFamily: "'IBM Plex Mono', monospace", fontSize: 11, color: T.gold, letterSpacing: 2, textTransform: "uppercase", marginBottom: 4 }}>{eyebrow}</div>}
       <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", flexWrap: "wrap", gap: 8 }}>
-        <h1 style={{ fontFamily: "'Playfair Display', serif", fontSize: 26, color: T.navyDark, margin: 0 }}>{title}</h1>
+        <h1 style={{ fontFamily: "'Playfair Display', serif", fontSize: 26, color: T.heading, margin: 0 }}>{title}</h1>
         {children}
       </div>
     </div>
@@ -210,7 +226,7 @@ function HomePage({ onEnter }) {
     <div style={{ minHeight: "100%", background: `linear-gradient(180deg, ${T.navyDark} 0%, ${T.navy} 55%, ${T.bg} 55%)` }}>
       <div style={{ maxWidth: 980, margin: "0 auto", padding: "56px 24px 40px" }}>
         <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 40 }}>
-          <div style={{ width: 34, height: 34, borderRadius: 4, background: T.gold, display: "flex", alignItems: "center", justifyContent: "center", fontFamily: "'Playfair Display', serif", fontWeight: 700, color: T.navyDark }}>1</div>
+          <div style={{ width: 34, height: 34, borderRadius: 4, background: T.gold, display: "flex", alignItems: "center", justifyContent: "center", fontFamily: "'Playfair Display', serif", fontWeight: 700, color: "#2A2210" }}>1</div>
           <span style={{ color: "#fff", fontFamily: "'Playfair Display', serif", fontSize: 20 }}>OnePaperPrep</span>
         </div>
         <div style={{ fontFamily: "'IBM Plex Mono', monospace", fontSize: 12, color: T.gold, letterSpacing: 3, textTransform: "uppercase", marginBottom: 12 }}>
@@ -237,7 +253,7 @@ function HomePage({ onEnter }) {
             <PerforatedCard key={i}>
               <div style={{ padding: 18 }}>
                 <f.icon size={20} color={T.navy} />
-                <div style={{ fontWeight: 700, color: T.navyDark, marginTop: 10, marginBottom: 4, fontSize: 14 }}>{f.t}</div>
+                <div style={{ fontWeight: 700, color: T.heading, marginTop: 10, marginBottom: 4, fontSize: 14 }}>{f.t}</div>
                 <div style={{ fontSize: 12.5, color: T.muted, lineHeight: 1.5 }}>{f.d}</div>
               </div>
             </PerforatedCard>
@@ -295,14 +311,14 @@ function AuthPage({ mode, setMode, onAuthed, onBack }) {
         <button onClick={onBack} style={{ background: "none", border: "none", color: T.muted, fontSize: 13, marginBottom: 16, cursor: "pointer" }}>&larr; Back to home</button>
         <PerforatedCard>
           <div style={{ padding: 28 }}>
-            <div style={{ fontFamily: "'Playfair Display', serif", fontSize: 22, color: T.navyDark, marginBottom: 4 }}>
+            <div style={{ fontFamily: "'Playfair Display', serif", fontSize: 22, color: T.heading, marginBottom: 4 }}>
               {mode === "login" ? "Welcome back" : "Create your account"}
             </div>
             <div style={{ fontSize: 13, color: T.muted, marginBottom: 20 }}>
               {mode === "login" ? "Log in to continue your prep." : "Start tracking your weak subjects today."}
             </div>
             {error && (
-              <div style={{ marginBottom: 14, padding: 10, background: "#FBEAE8", color: T.danger, fontSize: 12.5, borderRadius: 4 }}>{error}</div>
+              <div style={{ marginBottom: 14, padding: 10, background: tint(T.danger, 15), color: T.danger, fontSize: 12.5, borderRadius: 4 }}>{error}</div>
             )}
             <form onSubmit={handleSubmit}>
               {mode === "signup" && (
@@ -336,8 +352,91 @@ function AuthPage({ mode, setMode, onAuthed, onBack }) {
     </div>
   );
 }
-const inputStyle = { width: "100%", padding: "9px 10px", border: `1px solid ${T.border}`, borderRadius: 4, fontSize: 13.5, marginTop: 4, outline: "none", boxSizing: "border-box" };
+const inputStyle = { width: "100%", padding: "9px 10px", border: `1px solid ${T.border}`, borderRadius: 4, fontSize: 13.5, marginTop: 4, outline: "none", boxSizing: "border-box", background: T.surface, color: T.ink };
 const linkBtn = { background: "none", border: "none", color: T.navy, fontWeight: 600, cursor: "pointer", padding: 0, fontSize: 12.5 };
+
+/* ------------------------------------------------------------------ */
+/*  ONBOARDING WIZARD — shown once, right after a new signup           */
+/* ------------------------------------------------------------------ */
+function OnboardingWizard({ initialName, onComplete }) {
+  const [step, setStep] = useState(0);
+  const [name, setName] = useState(initialName || "");
+  const [targetExam, setTargetExam] = useState("FIA");
+  const [targetDept, setTargetDept] = useState("");
+  const [saving, setSaving] = useState(false);
+  const steps = ["Your name", "Your target", "You're set"];
+
+  async function finish() {
+    setSaving(true);
+    await onComplete({ name: name || "Student", targetExam, targetDept: targetDept || "General" });
+  }
+
+  return (
+    <div style={{ minHeight: "100%", background: T.bg, display: "flex", alignItems: "center", justifyContent: "center", padding: 24 }}>
+      <div style={{ width: 400 }}>
+        <div style={{ display: "flex", gap: 6, marginBottom: 18 }}>
+          {steps.map((s, i) => (
+            <div key={s} style={{ flex: 1, height: 4, borderRadius: 2, background: i <= step ? T.gold : T.border }} />
+          ))}
+        </div>
+        <PerforatedCard>
+          <div style={{ padding: 28, minHeight: 260, display: "flex", flexDirection: "column" }}>
+            {step === 0 && (
+              <>
+                <div style={{ fontFamily: "'Playfair Display', serif", fontSize: 21, color: T.heading, marginBottom: 6 }}>Assalam-o-Alaikum! 👋</div>
+                <div style={{ fontSize: 13, color: T.muted, marginBottom: 20 }}>What should we call you?</div>
+                <label style={{ fontSize: 12, color: T.muted }}>Your name</label>
+                <input autoFocus value={name} onChange={(e) => setName(e.target.value)} placeholder="e.g. Ahmed Raza" style={inputStyle} />
+                <div style={{ flex: 1 }} />
+                <Btn onClick={() => setStep(1)} disabled={!name.trim()} className="w-full">Next <ChevronRight size={14} /></Btn>
+              </>
+            )}
+            {step === 1 && (
+              <>
+                <div style={{ fontFamily: "'Playfair Display', serif", fontSize: 21, color: T.heading, marginBottom: 6 }}>What are you preparing for?</div>
+                <div style={{ fontSize: 13, color: T.muted, marginBottom: 20 }}>We'll tailor your Quiz Builder's syllabus weightage to this.</div>
+                <label style={{ fontSize: 12, color: T.muted }}>Target test</label>
+                <select value={targetExam} onChange={(e) => setTargetExam(e.target.value)} style={inputStyle}>
+                  {Object.entries(EXAM_WEIGHTAGE).map(([k, v]) => <option key={k} value={k}>{v.label}</option>)}
+                </select>
+                <label style={{ fontSize: 12, color: T.muted, marginTop: 12, display: "block" }}>Target post (optional)</label>
+                <input value={targetDept} onChange={(e) => setTargetDept(e.target.value)} placeholder="e.g. Sub-Inspector" style={inputStyle} />
+                <div style={{ flex: 1 }} />
+                <div style={{ display: "flex", gap: 10 }}>
+                  <Btn variant="ghost" onClick={() => setStep(0)}>Back</Btn>
+                  <Btn onClick={() => setStep(2)} className="flex-1">Next <ChevronRight size={14} /></Btn>
+                </div>
+              </>
+            )}
+            {step === 2 && (
+              <>
+                <div style={{ fontFamily: "'Playfair Display', serif", fontSize: 21, color: T.heading, marginBottom: 6 }}>You're all set, {name.split(" ")[0]}!</div>
+                <div style={{ fontSize: 13, color: T.muted, marginBottom: 20, lineHeight: 1.6 }}>
+                  A few quick tips before you start:
+                </div>
+                <div style={{ display: "flex", flexDirection: "column", gap: 10, marginBottom: 20 }}>
+                  {[
+                    "Practice daily to build your streak — even 5 minutes counts.",
+                    "The Quiz Builder can auto-match your target test's real syllabus weightage.",
+                    "Your weakest subject is always flagged on the Dashboard.",
+                  ].map((tip, i) => (
+                    <div key={i} style={{ display: "flex", gap: 8, fontSize: 12.5, color: T.ink }}>
+                      <CheckCircle2 size={15} color={T.success} style={{ flexShrink: 0, marginTop: 1 }} /> {tip}
+                    </div>
+                  ))}
+                </div>
+                <div style={{ flex: 1 }} />
+                <Btn variant="green" onClick={finish} disabled={saving} className="w-full">
+                  {saving ? "Setting up…" : "Go to my Dashboard"}
+                </Btn>
+              </>
+            )}
+          </div>
+        </PerforatedCard>
+      </div>
+    </div>
+  );
+}
 
 /* ------------------------------------------------------------------ */
 /*  DASHBOARD                                                           */
@@ -382,17 +481,32 @@ function Dashboard({ profile, subjectStrength, weakest, goPage, streak, practice
 
       <PerforatedCard>
         <div style={{ padding: 20 }}>
-          <div style={{ fontWeight: 700, color: T.navyDark, marginBottom: 14, fontSize: 14 }}>Subject-wise strength</div>
-          <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
-            {subjectStrength.map((s) => (
-              <div key={s.id} style={{ display: "flex", alignItems: "center", gap: 10 }}>
-                <div style={{ width: 150, fontSize: 12.5, color: T.ink }}>{s.name}</div>
-                <div style={{ flex: 1, height: 8, background: "#EEF1F2", borderRadius: 4, overflow: "hidden" }}>
-                  <div style={{ width: `${s.percent}%`, height: "100%", background: s.percent >= 75 ? T.success : s.percent >= 50 ? T.warning : T.danger }} />
+          <div style={{ fontWeight: 700, color: T.heading, marginBottom: 14, fontSize: 14 }}>Subject-wise strength</div>
+          <div style={{ display: "flex", flexWrap: "wrap", gap: 20, alignItems: "center" }}>
+            <div style={{ width: 220, height: 220, flexShrink: 0 }}>
+              <ResponsiveContainer width="100%" height="100%">
+                <PieChart>
+                  <Pie
+                    data={subjectStrength} dataKey="percent" nameKey="name"
+                    cx="50%" cy="50%" innerRadius={55} outerRadius={90} paddingAngle={2}
+                  >
+                    {subjectStrength.map((s) => (
+                      <Cell key={s.id} fill={s.percent >= 75 ? T.success : s.percent >= 50 ? T.warning : T.danger} stroke={T.surface} strokeWidth={2} />
+                    ))}
+                  </Pie>
+                  <RTooltip formatter={(value, name) => [`${value}%`, name]} contentStyle={{ background: T.surface, border: `1px solid ${T.border}`, borderRadius: 6, fontSize: 12 }} />
+                </PieChart>
+              </ResponsiveContainer>
+            </div>
+            <div style={{ flex: 1, minWidth: 220, display: "flex", flexDirection: "column", gap: 8 }}>
+              {subjectStrength.map((s) => (
+                <div key={s.id} style={{ display: "flex", alignItems: "center", gap: 8 }}>
+                  <span style={{ width: 9, height: 9, borderRadius: "50%", background: s.percent >= 75 ? T.success : s.percent >= 50 ? T.warning : T.danger, flexShrink: 0 }} />
+                  <span style={{ flex: 1, fontSize: 12.5, color: T.ink }}>{s.name}</span>
+                  <Pill color={s.percent >= 75 ? T.success : s.percent >= 50 ? T.warning : T.danger}>{s.percent}%</Pill>
                 </div>
-                <div style={{ width: 70, textAlign: "right" }}><Pill color={s.percent >= 75 ? T.success : s.percent >= 50 ? T.warning : T.danger}>{s.percent}% {s.percent >= 75 ? "Strong" : s.percent >= 50 ? "Fair" : "Weak"}</Pill></div>
-              </div>
-            ))}
+              ))}
+            </div>
           </div>
         </div>
       </PerforatedCard>
@@ -422,7 +536,7 @@ function Practice({ initialSubject, bookmarks, toggleBookmark }) {
           {SUBJECTS.map((s) => (
             <button key={s.id} onClick={() => setSubjectId(s.id)} style={{
               display: "block", width: "100%", textAlign: "left", padding: "9px 12px", marginBottom: 6, borderRadius: 4,
-              border: `1px solid ${subjectId === s.id ? s.color : T.border}`, background: subjectId === s.id ? s.color + "12" : "#fff",
+              border: `1px solid ${subjectId === s.id ? s.color : T.border}`, background: subjectId === s.id ? s.color + "12" : T.surface,
               cursor: "pointer", fontSize: 13, color: subjectId === s.id ? s.color : T.ink, fontWeight: subjectId === s.id ? 700 : 400,
             }}>
               {s.name}
@@ -435,7 +549,7 @@ function Practice({ initialSubject, bookmarks, toggleBookmark }) {
               <button key={d} onClick={() => setDifficulty(d)} style={{
                 fontSize: 11.5, padding: "4px 10px", borderRadius: 20, cursor: "pointer",
                 border: `1px solid ${difficulty === d ? T.navy : T.border}`,
-                background: difficulty === d ? T.navy : "#fff", color: difficulty === d ? "#fff" : T.muted,
+                background: difficulty === d ? T.navy : T.surface, color: difficulty === d ? "#fff" : T.muted,
               }}>{d}</button>
             ))}
           </div>
@@ -444,16 +558,16 @@ function Practice({ initialSubject, bookmarks, toggleBookmark }) {
               <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start" }}>
                 <Pill color={subject.color}>{subject.short} · {q.difficulty}</Pill>
                 <button onClick={() => toggleBookmark(q.id)} title="Bookmark" style={{ background: "none", border: "none", cursor: "pointer" }}>
-                  <Flag size={17} color={bookmarks.has(q.id) ? T.gold : "#C7CDD2"} fill={bookmarks.has(q.id) ? T.gold : "none"} />
+                  <Flag size={17} color={bookmarks.has(q.id) ? T.gold : T.border} fill={bookmarks.has(q.id) ? T.gold : "none"} />
                 </button>
               </div>
               <div style={{ fontSize: 16, margin: "14px 0 18px", color: T.ink, lineHeight: 1.5 }}>{q.text}</div>
               <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
                 {q.options.map((opt, i) => {
-                  let bg = "#fff", bd = T.border;
+                  let bg = "transparent", bd = T.border;
                   if (selected !== null) {
-                    if (i === q.correct) { bg = "#EAF6EE"; bd = T.success; }
-                    else if (i === selected) { bg = "#FBEAE8"; bd = T.danger; }
+                    if (i === q.correct) { bg = tint(T.success, 15); bd = T.success; }
+                    else if (i === selected) { bg = tint(T.danger, 15); bd = T.danger; }
                   }
                   return (
                     <button key={i} onClick={() => selected === null && setSelected(i)} style={{
@@ -468,7 +582,7 @@ function Practice({ initialSubject, bookmarks, toggleBookmark }) {
                 })}
               </div>
               {selected !== null && (
-                <div style={{ marginTop: 14, padding: 12, background: "#F5F7F5", borderRadius: 4, fontSize: 12.5, color: T.muted }}>
+                <div style={{ marginTop: 14, padding: 12, background: T.surfaceAlt, borderRadius: 4, fontSize: 12.5, color: T.muted }}>
                   <b style={{ color: T.ink }}>Explanation: </b>{q.explanation}
                 </div>
               )}
@@ -502,7 +616,7 @@ function PastPapers({ onAttempt }) {
           <PerforatedCard key={p.id}>
             <div style={{ padding: 16, display: "flex", justifyContent: "space-between", alignItems: "center", flexWrap: "wrap", gap: 10 }}>
               <div>
-                <div style={{ fontWeight: 700, fontSize: 14, color: T.navyDark }}>{p.body} — {p.post}</div>
+                <div style={{ fontWeight: 700, fontSize: 14, color: T.heading }}>{p.body} — {p.post}</div>
                 <div style={{ fontSize: 12, color: T.muted, marginTop: 2 }}>{p.year} &middot; {p.questions} MCQs &middot; {p.duration} min &middot; Timed exam mode</div>
               </div>
               <div style={{ display: "flex", gap: 8 }}>
@@ -543,14 +657,14 @@ function QuizBuilder({ onStart }) {
               {Object.entries(EXAM_WEIGHTAGE).map(([k, v]) => <option key={k} value={k}>{v.label}</option>)}
             </select>
 
-            <div style={{ marginTop: 18, marginBottom: 8, fontSize: 13, fontWeight: 700, color: T.navyDark }}>Official syllabus weightage</div>
+            <div style={{ marginTop: 18, marginBottom: 8, fontSize: 13, fontWeight: 700, color: T.heading }}>Official syllabus weightage</div>
             <div style={{ display: "flex", flexDirection: "column", gap: 6, marginBottom: 20 }}>
               {Object.entries(exam.weightage).map(([subId, pct]) => {
                 const s = SUBJECTS.find((x) => x.id === subId);
                 return (
                   <div key={subId} style={{ display: "flex", alignItems: "center", gap: 10 }}>
                     <div style={{ width: 150, fontSize: 12.5 }}>{s?.name}</div>
-                    <div style={{ flex: 1, height: 8, background: "#EEF1F2", borderRadius: 4 }}>
+                    <div style={{ flex: 1, height: 8, background: T.track, borderRadius: 4 }}>
                       <div style={{ width: `${pct}%`, height: "100%", background: s?.color, borderRadius: 4 }} />
                     </div>
                     <div style={{ width: 34, fontSize: 12, textAlign: "right" }}>{pct}%</div>
@@ -605,7 +719,7 @@ function QuizBuilder({ onStart }) {
         </PerforatedCard>
         <PerforatedCard>
           <div style={{ padding: 18 }}>
-            <div style={{ fontWeight: 700, fontSize: 13, color: T.navyDark, marginBottom: 10 }}>Why weightage matters</div>
+            <div style={{ fontWeight: 700, fontSize: 13, color: T.heading, marginBottom: 10 }}>Why weightage matters</div>
             <p style={{ fontSize: 12.5, color: T.muted, lineHeight: 1.6 }}>
               Each test body allots marks differently. {exam.label} leans heavily on {SUBJECTS.find(s => s.id === Object.entries(exam.weightage).sort((a,b)=>b[1]-a[1])[0][0])?.name}, so a quiz that mirrors it exactly gives a far more realistic practice signal than a generic mixed set.
             </p>
@@ -616,7 +730,7 @@ function QuizBuilder({ onStart }) {
   );
 }
 function tabBtn(active) {
-  return { fontSize: 12.5, padding: "7px 12px", borderRadius: 4, cursor: "pointer", border: `1px solid ${active ? T.navy : T.border}`, background: active ? T.navy : "#fff", color: active ? "#fff" : T.ink };
+  return { fontSize: 12.5, padding: "7px 12px", borderRadius: 4, cursor: "pointer", border: `1px solid ${active ? T.navy : T.border}`, background: active ? T.navy : T.surface, color: active ? "#fff" : T.ink };
 }
 
 /* ------------------------------------------------------------------ */
@@ -657,7 +771,7 @@ function QuizRunner({ config, onFinish }) {
     <div>
       <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 16 }}>
         <div style={{ fontSize: 13, color: T.muted }}>Question {idx + 1} of {questions.length} &middot; {q.subjectName}</div>
-        <div style={{ display: "flex", alignItems: "center", gap: 6, fontFamily: "'IBM Plex Mono', monospace", color: secondsLeft < 60 ? T.danger : T.navyDark, fontWeight: 700 }}>
+        <div style={{ display: "flex", alignItems: "center", gap: 6, fontFamily: "'IBM Plex Mono', monospace", color: secondsLeft < 60 ? T.danger : T.heading, fontWeight: 700 }}>
           <Clock size={15} /> {mm}:{ss}
         </div>
       </div>
@@ -668,7 +782,7 @@ function QuizRunner({ config, onFinish }) {
             {q.options.map((opt, i) => (
               <button key={i} onClick={() => setAnswers((a) => ({ ...a, [q.uid]: i }))} style={{
                 textAlign: "left", padding: "10px 12px", borderRadius: 4, fontSize: 13.5, cursor: "pointer",
-                border: `1px solid ${answers[q.uid] === i ? T.navy : T.border}`, background: answers[q.uid] === i ? T.navy + "10" : "#fff",
+                border: `1px solid ${answers[q.uid] === i ? T.navy : T.border}`, background: answers[q.uid] === i ? tint(T.navy) : "transparent",
               }}>{opt}</button>
             ))}
           </div>
@@ -684,7 +798,7 @@ function QuizRunner({ config, onFinish }) {
         {questions.map((qq, i) => (
           <button key={qq.uid} onClick={() => setIdx(i)} style={{
             width: 26, height: 26, fontSize: 11, borderRadius: 4, cursor: "pointer",
-            border: `1px solid ${T.border}`, background: answers[qq.uid] !== undefined ? T.green : i === idx ? T.navy + "22" : "#fff",
+            border: `1px solid ${T.border}`, background: answers[qq.uid] !== undefined ? T.green : i === idx ? tint(T.navy, 22) : T.surface,
             color: answers[qq.uid] !== undefined ? "#fff" : T.ink,
           }}>{i + 1}</button>
         ))}
@@ -782,7 +896,7 @@ function Leaderboard({ youName, youScore, youStreak }) {
     <div>
       <SectionTitle eyebrow="This week" title="Leaderboard" />
       {youScore === null && (
-        <div style={{ marginBottom: 14, padding: 12, background: "#FFF6E5", borderRadius: 4, fontSize: 12.5, color: T.warning }}>
+        <div style={{ marginBottom: 14, padding: 12, background: tint(T.warning, 15), borderRadius: 4, fontSize: 12.5, color: T.warning }}>
           Complete a quiz to appear on the leaderboard with your own score and streak.
         </div>
       )}
@@ -792,16 +906,16 @@ function Leaderboard({ youName, youScore, youStreak }) {
             <div key={u.isYou ? "you" : u.rank} style={{
               display: "flex", alignItems: "center", gap: 14, padding: "12px 16px",
               borderBottom: `1px solid ${T.border}`,
-              background: u.isYou ? T.green + "10" : "transparent",
+              background: u.isYou ? tint(T.green) : "transparent",
             }}>
-              <div style={{ width: 26, height: 26, borderRadius: "50%", background: u.rank <= 3 ? T.gold : "#EEF1F2", color: u.rank <= 3 ? "#2A2210" : T.muted, display: "flex", alignItems: "center", justifyContent: "center", fontSize: 12, fontWeight: 700 }}>{u.rank}</div>
+              <div style={{ width: 26, height: 26, borderRadius: "50%", background: u.rank <= 3 ? T.gold : T.track, color: u.rank <= 3 ? "#2A2210" : T.muted, display: "flex", alignItems: "center", justifyContent: "center", fontSize: 12, fontWeight: 700 }}>{u.rank}</div>
               <div style={{ flex: 1 }}>
                 <div style={{ fontSize: 13.5, fontWeight: 600, display: "flex", alignItems: "center", gap: 6 }}>
                   {u.name} {u.isYou && <Pill color={T.green}>You</Pill>}
                 </div>
                 <div style={{ fontSize: 11.5, color: T.muted }}>{u.city} &middot; {u.streak}-day streak</div>
               </div>
-              <div style={{ fontFamily: "'IBM Plex Mono', monospace", fontWeight: 700, color: T.navyDark }}>{u.score}%</div>
+              <div style={{ fontFamily: "'IBM Plex Mono', monospace", fontWeight: 700, color: T.heading }}>{u.score}%</div>
             </div>
           ))}
         </div>
@@ -820,13 +934,13 @@ function Analytics({ subjectStrength, trend }) {
       <SectionTitle eyebrow="Performance" title="Analytics Dashboard" />
       <PerforatedCard>
         <div style={{ padding: 20, marginBottom: 20 }}>
-          <div style={{ fontWeight: 700, fontSize: 13, color: T.navyDark, marginBottom: 10 }}>Score trend over recent attempts</div>
+          <div style={{ fontWeight: 700, fontSize: 13, color: T.heading, marginBottom: 10 }}>Score trend over recent attempts</div>
           <ResponsiveContainer width="100%" height={220}>
             <LineChart data={trend}>
-              <CartesianGrid stroke="#EEF1F2" />
+              <CartesianGrid stroke={T.track} />
               <XAxis dataKey="attempt" tick={{ fontSize: 11 }} stroke={T.muted} />
               <YAxis tick={{ fontSize: 11 }} stroke={T.muted} domain={[0, 100]} />
-              <Tooltip />
+              <RTooltip />
               <Line type="monotone" dataKey="score" stroke={T.navy} strokeWidth={2.5} dot={{ r: 4, fill: T.gold }} />
             </LineChart>
           </ResponsiveContainer>
@@ -835,19 +949,19 @@ function Analytics({ subjectStrength, trend }) {
       <div style={{ marginTop: 20 }} />
       <PerforatedCard>
         <div style={{ padding: 20 }}>
-          <div style={{ fontWeight: 700, fontSize: 13, color: T.navyDark, marginBottom: 14 }}>Subject-wise strength & time flags</div>
+          <div style={{ fontWeight: 700, fontSize: 13, color: T.heading, marginBottom: 14 }}>Subject-wise strength & time flags</div>
           <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
             {subjectStrength.map((s) => (
               <div key={s.id} style={{ display: "flex", alignItems: "center", gap: 10 }}>
                 <div style={{ width: 150, fontSize: 12.5 }}>{s.name}</div>
-                <div style={{ flex: 1, height: 8, background: "#EEF1F2", borderRadius: 4 }}>
+                <div style={{ flex: 1, height: 8, background: T.track, borderRadius: 4 }}>
                   <div style={{ width: `${s.percent}%`, height: "100%", background: s.percent >= 75 ? T.success : s.percent >= 50 ? T.warning : T.danger, borderRadius: 4 }} />
                 </div>
                 <div style={{ width: 60, fontSize: 11, color: T.muted, textAlign: "right" }}>{s.avgTime}s/q</div>
               </div>
             ))}
           </div>
-          <div style={{ marginTop: 16, padding: 12, background: "#FBEAE8", borderRadius: 4, fontSize: 12.5, color: T.danger }}>
+          <div style={{ marginTop: 16, padding: 12, background: tint(T.danger, 15), borderRadius: 4, fontSize: 12.5, color: T.danger }}>
             <b>Recommendation:</b> Focus more on {weakest.name} this week — lowest strength score and slowest response time.
           </div>
         </div>
@@ -869,7 +983,7 @@ function Profile({ profile, setProfile, uiLang, setUiLang, onLogout, badges, onS
             <span key={b.label} style={{
               display: "inline-flex", alignItems: "center", gap: 6, fontSize: 12, fontWeight: 700,
               padding: "6px 12px", borderRadius: 20,
-              background: (b.tone === "gold" ? T.gold : b.tone === "success" ? T.success : T.warning) + "1A",
+              background: tint(b.tone === "gold" ? T.gold : b.tone === "success" ? T.success : T.warning),
               color: b.tone === "gold" ? "#8A6D1F" : b.tone === "success" ? T.success : T.warning,
             }}>
               <Award size={13} /> {b.label}
@@ -940,6 +1054,22 @@ export default function App() {
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [bookmarks, setBookmarks] = useState(new Set());
   const [uiLang, setUiLang] = useState("en");
+  const [theme, setTheme] = useState("light");
+  useEffect(() => {
+    const saved = typeof window !== "undefined" ? localStorage.getItem("opp_theme") : null;
+    if (saved === "dark" || saved === "light") {
+      setTheme(saved);
+      document.documentElement.setAttribute("data-theme", saved);
+    }
+  }, []);
+  function toggleTheme() {
+    setTheme((t) => {
+      const next = t === "light" ? "dark" : "light";
+      document.documentElement.setAttribute("data-theme", next);
+      localStorage.setItem("opp_theme", next);
+      return next;
+    });
+  }
   const [profile, setProfile] = useState({ name: "Ahmed Raza", targetExam: "FIA", targetDept: "Sub-Inspector" });
   const [quizConfig, setQuizConfig] = useState(null);
   const [quizResultData, setQuizResultData] = useState(null);
@@ -980,6 +1110,20 @@ export default function App() {
     if (p) {
       setProfile((prev) => ({ ...prev, name: p.display_name, targetExam: p.target_exam || prev.targetExam, targetDept: p.target_post || prev.targetDept }));
       setUiLang(p.ui_language || "en");
+      if (!p.onboarding_completed) { setView("onboarding"); return; }
+    }
+    setView("app");
+  }
+
+  async function handleOnboardingComplete(data) {
+    setProfile((prev) => ({ ...prev, name: data.name, targetExam: data.targetExam, targetDept: data.targetDept }));
+    const supabase = createSupabaseClient();
+    const { data: { user } } = await supabase.auth.getUser();
+    if (user) {
+      await supabase.from("profiles").update({
+        display_name: data.name, target_exam: data.targetExam,
+        target_post: data.targetDept, onboarding_completed: true,
+      }).eq("id", user.id);
     }
     setView("app");
   }
@@ -1046,18 +1190,19 @@ export default function App() {
     setPage("quizresult");
   }
 
-  const fontImport = `@import url('https://fonts.googleapis.com/css2?family=Playfair+Display:wght@600;700&family=Inter:wght@400;500;600;700&family=IBM+Plex+Mono:wght@500;700&display=swap');`;
-
   if (view === "home") {
-    return <><style>{fontImport}{`*{font-family:'Inter',sans-serif;box-sizing:border-box}`}</style><HomePage onEnter={(m) => { setAuthMode(m); setView("auth"); }} /></>;
+    return <><style>{`*{font-family:'Inter',sans-serif;box-sizing:border-box}`}</style><HomePage onEnter={(m) => { setAuthMode(m); setView("auth"); }} /></>;
   }
   if (view === "auth") {
-    return <><style>{fontImport}{`*{font-family:'Inter',sans-serif;box-sizing:border-box}`}</style><AuthPage mode={authMode} setMode={setAuthMode} onAuthed={handleAuthed} onBack={() => setView("home")} /></>;
+    return <><style>{`*{font-family:'Inter',sans-serif;box-sizing:border-box}`}</style><AuthPage mode={authMode} setMode={setAuthMode} onAuthed={handleAuthed} onBack={() => setView("home")} /></>;
+  }
+  if (view === "onboarding") {
+    return <><style>{`*{font-family:'Inter',sans-serif;box-sizing:border-box}`}</style><OnboardingWizard initialName={profile.name} onComplete={handleOnboardingComplete} /></>;
   }
 
   return (
     <div style={{ display: "flex", height: "100%", minHeight: 640, background: T.bg, fontFamily: "'Inter',sans-serif" }}>
-      <style>{fontImport}{`*{box-sizing:border-box} ::-webkit-scrollbar{width:8px} ::-webkit-scrollbar-thumb{background:#ccd3d8;border-radius:4px}`}</style>
+      <style>{`::-webkit-scrollbar{width:8px} ::-webkit-scrollbar-thumb{background:#ccd3d8;border-radius:4px}`}</style>
 
       {/* Sidebar */}
       <div style={{
@@ -1067,7 +1212,7 @@ export default function App() {
       }} className={sidebarOpen ? "" : "hidden md:block"}>
         <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 24 }}>
           <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
-            <div style={{ width: 26, height: 26, borderRadius: 4, background: T.gold, display: "flex", alignItems: "center", justifyContent: "center", fontFamily: "'Playfair Display', serif", fontWeight: 700, color: T.navyDark, fontSize: 13 }}>1</div>
+            <div style={{ width: 26, height: 26, borderRadius: 4, background: T.gold, display: "flex", alignItems: "center", justifyContent: "center", fontFamily: "'Playfair Display', serif", fontWeight: 700, color: "#2A2210", fontSize: 13 }}>1</div>
             <span style={{ fontFamily: "'Playfair Display', serif", fontSize: 15 }}>OnePaperPrep</span>
           </div>
           <button className="md:hidden" onClick={() => setSidebarOpen(false)} style={{ background: "none", border: "none", color: "#fff" }}><X size={18} /></button>
@@ -1092,6 +1237,9 @@ export default function App() {
             <Search size={14} style={{ position: "absolute", left: 10, top: 9 }} color={T.muted} />
             <input placeholder="Quick search…" onFocus={() => goPage("search")} readOnly style={{ ...inputStyle, marginTop: 0, paddingLeft: 30, cursor: "pointer" }} />
           </div>
+          <button onClick={toggleTheme} title={theme === "light" ? "Switch to dark mode" : "Switch to light mode"} style={{ background: "none", border: "none", cursor: "pointer", display: "flex", alignItems: "center", padding: 4, borderRadius: 4 }}>
+            {theme === "light" ? <Moon size={18} color={T.muted} /> : <Sun size={18} color={T.muted} />}
+          </button>
           <Bell size={18} color={T.muted} />
           <div style={{ width: 30, height: 30, borderRadius: "50%", background: T.navy, color: "#fff", display: "flex", alignItems: "center", justifyContent: "center", fontSize: 12, fontWeight: 700, cursor: "pointer" }} onClick={() => goPage("profile")}>
             {profile.name.split(" ").map((w) => w[0]).join("")}

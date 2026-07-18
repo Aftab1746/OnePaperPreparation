@@ -16,6 +16,7 @@ signup/login and search are now backed by a real database instead of mock state.
 1. In your Supabase project, open **SQL Editor** (left sidebar) → **New query**.
 2. Open `supabase/migrations/0001_init.sql` from this project, copy its entire contents, paste into the SQL editor, and click **Run**.
 3. You should see "Success. No rows returned." This creates all tables (`profiles`, `mcqs`, `documents`, `attempts`, `practice_days`) and their security policies.
+4. Repeat the same for `supabase/migrations/0002_onboarding.sql` (a small addition — adds one column so the app can remember whether a student has completed the welcome wizard).
 
 ## Step 3 — Get your API keys
 
