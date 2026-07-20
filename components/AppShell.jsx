@@ -96,6 +96,42 @@ const SUBJECTS = [
   ]},
 ];
 
+/* ------------------------------------------------------------------ */
+/*  DATABASE HELPERS — real questions come from the Supabase `mcqs` table */
+/* ------------------------------------------------------------------ */
+const PAGE_SIZE = 50; // how many questions we load from the database at a time
+
+// options_en / options_ur may arrive as a real array (jsonb) or a JSON string
+function toOptions(v) {
+  if (Array.isArray(v)) return v;
+  if (typeof v === "string") { try { const a = JSON.parse(v); return Array.isArray(a) ? a : []; } catch { return []; } }
+  return [];
+}
+
+// Turn one database row into the exact question shape the UI already uses,
+// so Practice / QuizRunner / QuizResult need no other changes.
+function mapRow(row) {
+  return {
+    id: String(row.id),
+    text: row.question_en,
+    text_ur: row.question_ur || "",
+    options: toOptions(row.options_en),
+    options_ur: toOptions(row.options_ur),
+    correct: row.correct_index,
+    difficulty: row.difficulty || "Medium",
+    explanation: row.explanation_en || row.explanation || "",
+  };
+}
+
+function shuffleArray(arr) {
+  const a = [...arr];
+  for (let i = a.length - 1; i > 0; i--) {
+    const j = Math.floor(Math.random() * (i + 1));
+    [a[i], a[j]] = [a[j], a[i]];
+  }
+  return a;
+}
+
 const EXAM_WEIGHTAGE = {
   FIA: { label: "FIA (Sub-Inspector / UDC)", weightage: { gk: 45, english: 30, math: 15, pakstudy: 5, islamiat: 5 } },
   PPSC: { label: "PPSC (General Recruitment)", weightage: { gk: 25, english: 20, urdu: 10, islamiat: 10, pakstudy: 15, math: 10, reasoning: 10 } },
@@ -631,11 +667,71 @@ function Practice({ initialSubject, bookmarks, toggleBookmark }) {
   const [qIdx, setQIdx] = useState(0);
   const [selected, setSelected] = useState(null);
   const [difficulty, setDifficulty] = useState("All");
+  const [questions, setQuestions] = useState([]); // loaded so far
+  const [total, setTotal] = useState(0);          // total in database
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState("");
+  const loadingMoreRef = useRef(false);
   const subject = SUBJECTS.find((s) => s.id === subjectId);
-  const pool = subject.questions.filter((q) => difficulty === "All" || q.difficulty === difficulty);
-  const q = pool[qIdx % pool.length];
 
-  useEffect(() => { setQIdx(0); setSelected(null); }, [subjectId, difficulty]);
+  // When the subject changes: load the first page (50 questions) from Supabase
+  useEffect(() => {
+    let alive = true;
+    setQIdx(0); setSelected(null); setQuestions([]); setTotal(0); setError(""); setLoading(true);
+    (async () => {
+      const supabase = createSupabaseClient();
+      const { data, count, error: err } = await supabase
+        .from("mcqs")
+        .select("*", { count: "exact" })
+        .eq("subject", subjectId)
+        .eq("is_published", true)
+        .order("id", { ascending: true })
+        .range(0, PAGE_SIZE - 1);
+      if (!alive) return;
+      if (err) {
+        setError(err.message);
+      } else if (data && data.length > 0) {
+        setQuestions(data.map(mapRow));
+        setTotal(count || data.length);
+      } else {
+        // Database has no questions for this subject yet — use built-in samples
+        setQuestions(subject.questions);
+        setTotal(subject.questions.length);
+      }
+      setLoading(false);
+    })();
+    return () => { alive = false; };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [subjectId]);
+
+  // Load the next 50 questions when the user gets close to the end
+  async function loadMore() {
+    if (loadingMoreRef.current || questions.length >= total) return;
+    loadingMoreRef.current = true;
+    const from = questions.length;
+    const supabase = createSupabaseClient();
+    const { data } = await supabase
+      .from("mcqs")
+      .select("*")
+      .eq("subject", subjectId)
+      .eq("is_published", true)
+      .order("id", { ascending: true })
+      .range(from, from + PAGE_SIZE - 1);
+    if (data && data.length > 0) setQuestions((prev) => [...prev, ...data.map(mapRow)]);
+    loadingMoreRef.current = false;
+  }
+
+  useEffect(() => { setQIdx(0); setSelected(null); }, [difficulty]);
+
+  const pool = questions.filter((q) => difficulty === "All" || q.difficulty === difficulty);
+  const q = pool.length > 0 ? pool[qIdx % pool.length] : null;
+
+  function nextQuestion() {
+    setSelected(null);
+    setQIdx((v) => v + 1);
+    // Quietly fetch the next page a few questions before we run out
+    if (qIdx + 5 >= questions.length) loadMore();
+  }
 
   return (
     <div>
@@ -662,10 +758,23 @@ function Practice({ initialSubject, bookmarks, toggleBookmark }) {
               }}>{d}</button>
             ))}
           </div>
+          {loading && (
+            <PerforatedCard><div style={{ padding: 30, textAlign: "center", fontSize: 13, color: T.muted }}>Loading questions…</div></PerforatedCard>
+          )}
+          {!loading && error && (
+            <PerforatedCard><div style={{ padding: 30, textAlign: "center", fontSize: 13, color: T.danger }}>Could not load questions: {error}</div></PerforatedCard>
+          )}
+          {!loading && !error && !q && (
+            <PerforatedCard><div style={{ padding: 30, textAlign: "center", fontSize: 13, color: T.muted }}>No questions found for this filter.</div></PerforatedCard>
+          )}
+          {!loading && !error && q && (
           <PerforatedCard>
             <div style={{ padding: 22 }}>
               <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start" }}>
                 <Pill color={subject.color}>{subject.short} · {q.difficulty}</Pill>
+                <span style={{ fontSize: 11.5, color: T.muted, fontFamily: "'IBM Plex Mono', monospace" }}>
+                  Q {(qIdx % pool.length) + 1} of {difficulty === "All" ? total : pool.length}
+                </span>
                 <button onClick={() => toggleBookmark(q.id)} title="Bookmark" style={{ background: "none", border: "none", cursor: "pointer" }}>
                   <Flag size={17} color={bookmarks.has(q.id) ? T.gold : T.border} fill={bookmarks.has(q.id) ? T.gold : "none"} />
                 </button>
@@ -690,16 +799,17 @@ function Practice({ initialSubject, bookmarks, toggleBookmark }) {
                   );
                 })}
               </div>
-              {selected !== null && (
+              {selected !== null && q.explanation && (
                 <div style={{ marginTop: 14, padding: 12, background: T.surfaceAlt, borderRadius: 4, fontSize: 12.5, color: T.muted }}>
                   <b style={{ color: T.ink }}>Explanation: </b>{q.explanation}
                 </div>
               )}
               <div style={{ marginTop: 18, display: "flex", justifyContent: "flex-end" }}>
-                <Btn onClick={() => { setSelected(null); setQIdx((v) => v + 1); }}>Next question <ChevronRight size={14} /></Btn>
+                <Btn onClick={nextQuestion}>Next question <ChevronRight size={14} /></Btn>
               </div>
             </div>
           </PerforatedCard>
+          )}
         </div>
       </div>
     </div>
@@ -845,32 +955,74 @@ function tabBtn(active) {
 /* ------------------------------------------------------------------ */
 /*  QUIZ RUNNER + RESULT                                                */
 /* ------------------------------------------------------------------ */
-function buildQuizQuestions(config) {
+// Builds a quiz from the real `mcqs` table. For each subject in the weightage:
+// 1) count how many published questions it has,
+// 2) start reading from a random position so every quiz is different,
+// 3) if the subject is empty in the database, fall back to built-in samples.
+async function fetchQuizQuestions(config) {
+  const supabase = createSupabaseClient();
   const list = [];
-  const entries = Object.entries(config.weightage);
-  entries.forEach(([subId, pct]) => {
+  for (const [subId, pct] of Object.entries(config.weightage)) {
     const subject = SUBJECTS.find((s) => s.id === subId);
-    if (!subject) return;
-    const count = Math.max(1, Math.round((Number(pct) / 100) * config.totalQ));
-    for (let i = 0; i < count; i++) {
-      const q = subject.questions[i % subject.questions.length];
-      list.push({ ...q, subjectId: subId, subjectName: subject.name, uid: `${q.id}-${i}` });
+    if (!subject || !Number(pct)) continue;
+    const need = Math.max(1, Math.round((Number(pct) / 100) * config.totalQ));
+
+    const { count } = await supabase
+      .from("mcqs")
+      .select("id", { count: "exact", head: true })
+      .eq("subject", subId)
+      .eq("is_published", true);
+
+    let picked = [];
+    if (count && count > 0) {
+      const take = Math.min(need, count);
+      const start = Math.floor(Math.random() * Math.max(1, count - take + 1));
+      const { data } = await supabase
+        .from("mcqs")
+        .select("*")
+        .eq("subject", subId)
+        .eq("is_published", true)
+        .order("id", { ascending: true })
+        .range(start, start + take - 1);
+      picked = (data || []).map(mapRow);
     }
-  });
-  return list.slice(0, config.totalQ);
+    if (picked.length === 0) {
+      for (let i = 0; i < need; i++) picked.push(subject.questions[i % subject.questions.length]);
+    }
+    picked.forEach((q, i) => list.push({ ...q, subjectId: subId, subjectName: subject.name, uid: `${subId}-${q.id}-${i}` }));
+  }
+  return shuffleArray(list).slice(0, config.totalQ);
 }
 
 function QuizRunner({ config, onFinish }) {
-  const questions = useMemo(() => buildQuizQuestions(config), [config]);
+  const [questions, setQuestions] = useState(null); // null = still loading
   const [idx, setIdx] = useState(0);
   const [answers, setAnswers] = useState({});
   const [secondsLeft, setSecondsLeft] = useState(config.timer * 60);
 
+  // Fetch real questions from the database when the quiz starts
   useEffect(() => {
+    let alive = true;
+    fetchQuizQuestions(config).then((qs) => { if (alive) setQuestions(qs); });
+    return () => { alive = false; };
+  }, [config]);
+
+  // The timer only starts ticking after questions have loaded
+  useEffect(() => {
+    if (!questions) return;
     if (secondsLeft <= 0) { onFinish(questions, answers); return; }
     const t = setTimeout(() => setSecondsLeft((s) => s - 1), 1000);
     return () => clearTimeout(t);
-  }, [secondsLeft]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [secondsLeft, questions]);
+
+  if (!questions) {
+    return (
+      <PerforatedCard>
+        <div style={{ padding: 40, textAlign: "center", fontSize: 13, color: T.muted }}>Preparing your quiz from the question bank…</div>
+      </PerforatedCard>
+    );
+  }
 
   const q = questions[idx];
   const mm = String(Math.floor(secondsLeft / 60)).padStart(2, "0");
